@@ -1,0 +1,27 @@
+# Python 缓存文件
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# PyInstaller 构建产物
+build/
+dist/
+*.spec
+
+# 脚本数据
+scripts/
+*.mrs
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# 日志
+*.log
