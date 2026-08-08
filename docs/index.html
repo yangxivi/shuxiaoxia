@@ -1,1 +1,668 @@
-<!DOCTYPE html>\n<html lang=\"zh-CN\">\n<head>\n<meta charset=\"UTF-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n<title>\u9f20\u5c0f\u4fa0 \u00b7 \u66e6\u5fae\u51fa\u54c1\u81ea\u52a8\u70b9\u51fb\u5668 \u2014 \u5f55\u4e00\u904d\uff0c\u81ea\u52a8\u91cd\u6f14\u65e0\u6570\u904d</title>\n<meta name=\"description\" content=\"\u9f20\u5c0f\u4fa0\u662f\u4e00\u6b3e\u8f7b\u91cf\u5316\u7684 Windows \u952e\u9f20\u5f55\u5236\u56de\u653e\u5de5\u5177\u3002\u5f55\u5236\u4e00\u904d\u9f20\u6807\u952e\u76d8\u64cd\u4f5c\uff0c\u5373\u53ef\u7cbe\u786e\u56de\u653e\u3001\u5faa\u73af\u6267\u884c\uff0c\u8ba9\u91cd\u590d\u70b9\u51fb\u4e00\u53bb\u4e0d\u590d\u8fd4\u3002\">\n<link rel=\"preconnect\" href=\"https://fonts.googleapis.com\">\n<link rel=\"preconnect\" href=\"https://fonts.gstatic.com\" crossorigin>\n<link href=\"https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap\" rel=\"stylesheet\">\n<style>\n  :root{\n    --bg:#FBFAF8;\n    --bg-2:#F4F2ED;\n    --ink:#18181B;\n    --ink-2:#3F3F46;\n    --muted:#71717A;\n    --accent:#FF5436;\n    --accent-2:#FF7A52;\n    --accent-soft:#FFE9E3;\n    --card:#FFFFFF;\n    --border:#ECEAE4;\n    --shadow-sm:0 1px 2px rgba(24,24,27,.04),0 2px 8px rgba(24,24,27,.04);\n    --shadow-md:0 4px 12px rgba(24,24,27,.06),0 12px 32px rgba(24,24,27,.06);\n    --shadow-lg:0 12px 28px rgba(24,24,27,.10),0 28px 64px rgba(24,24,27,.10);\n    --radius:18px;\n    --radius-lg:28px;\n    --maxw:1120px;\n  }\n  *{box-sizing:border-box;margin:0;padding:0}\n  html{scroll-behavior:smooth}\n  body{\n    font-family:\"Inter\",\"PingFang SC\",\"Microsoft YaHei\",\"Hiragino Sans GB\",\"Source Han Sans SC\",sans-serif;\n    background:var(--bg);\n    color:var(--ink);\n    line-height:1.6;\n    -webkit-font-smoothing:antialiased;\n    overflow-x:hidden;\n  }\n  a{color:inherit;text-decoration:none}\n  .wrap{max-width:var(--maxw);margin:0 auto;padding:0 24px}\n  .eyebrow{\n    display:inline-flex;align-items:cent
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>鼠小侠 · 曦微出品自动点击器 — 录一遍，自动重演无数遍</title>
+<meta name="description" content="鼠小侠是一款轻量化的 Windows 键鼠录制回放工具。录制一遍鼠标键盘操作，即可精确回放、循环执行，让重复点击一去不复返。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#FBFAF8;
+    --bg-2:#F4F2ED;
+    --ink:#18181B;
+    --ink-2:#3F3F46;
+    --muted:#71717A;
+    --accent:#FF5436;
+    --accent-2:#FF7A52;
+    --accent-soft:#FFE9E3;
+    --card:#FFFFFF;
+    --border:#ECEAE4;
+    --shadow-sm:0 1px 2px rgba(24,24,27,.04),0 2px 8px rgba(24,24,27,.04);
+    --shadow-md:0 4px 12px rgba(24,24,27,.06),0 12px 32px rgba(24,24,27,.06);
+    --shadow-lg:0 12px 28px rgba(24,24,27,.10),0 28px 64px rgba(24,24,27,.10);
+    --radius:18px;
+    --radius-lg:28px;
+    --maxw:1120px;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{
+    font-family:"Inter","PingFang SC","Microsoft YaHei","Hiragino Sans GB","Source Han Sans SC",sans-serif;
+    background:var(--bg);
+    color:var(--ink);
+    line-height:1.6;
+    -webkit-font-smoothing:antialiased;
+    overflow-x:hidden;
+  }
+  a{color:inherit;text-decoration:none}
+  .wrap{max-width:var(--maxw);margin:0 auto;padding:0 24px}
+  .eyebrow{
+    display:inline-flex;align-items:center;gap:8px;
+    font-size:13px;font-weight:600;letter-spacing:.04em;
+    color:var(--accent);
+    background:var(--accent-soft);
+    padding:6px 14px;border-radius:999px;
+  }
+  .eyebrow .dot{width:6px;height:6px;border-radius:50%;background:var(--accent);animation:pulse 1.8s infinite}
+  @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.7)}}
+  h1,h2,h3{letter-spacing:-.02em;line-height:1.15}
+  .btn{
+    display:inline-flex;align-items:center;justify-content:center;gap:8px;
+    font-weight:600;font-size:15px;
+    padding:13px 26px;border-radius:999px;
+    transition:transform .18s ease,box-shadow .18s ease,background .18s ease;
+    cursor:pointer;border:none;
+  }
+  .btn-primary{background:var(--ink);color:#fff;box-shadow:var(--shadow-sm)}
+  .btn-primary:hover{transform:translateY(-2px);box-shadow:var(--shadow-md)}
+  .btn-accent{background:var(--accent);color:#fff;box-shadow:0 6px 18px rgba(255,84,54,.32)}
+  .btn-accent:hover{transform:translateY(-2px);box-shadow:0 10px 26px rgba(255,84,54,.40)}
+  .btn-ghost{background:transparent;color:var(--ink);border:1px solid var(--border)}
+  .btn-ghost:hover{border-color:var(--ink);background:#fff}
+
+  /* NAV */
+  header{position:sticky;top:0;z-index:50;border-bottom:1px solid transparent;transition:background .3s,border-color .3s,backdrop-filter .3s}
+  header.scrolled{background:rgba(251,250,248,.82);backdrop-filter:saturate(180%) blur(12px);border-bottom-color:var(--border)}
+  .nav{display:flex;align-items:center;justify-content:space-between;height:70px}
+  .logo{display:flex;align-items:center;gap:10px;font-weight:800;font-size:19px;letter-spacing:-.02em}
+  .logo .mark{
+    width:34px;height:34px;border-radius:10px;
+    background:linear-gradient(135deg,var(--accent),var(--accent-2));
+    display:grid;place-items:center;color:#fff;font-size:18px;box-shadow:0 4px 12px rgba(255,84,54,.30)
+  }
+  .nav-links{display:flex;gap:10px;font-size:14px;font-weight:600;color:var(--ink-2)}
+  .nav-links a{
+    padding:6px 16px;border-radius:999px;border:1px solid var(--border);
+    background:var(--card);color:var(--ink-2);text-decoration:none;
+    transition:all .25s ease
+  }
+  .nav-links a:hover{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .nav-cta{display:flex;align-items:center;gap:14px}
+  @media(max-width:860px){.nav-links{display:none}.nav-cta .btn-ghost{display:none}}
+
+  /* HERO */
+  .hero{padding:72px 0 48px;position:relative}
+  .hero-grid{display:grid;grid-template-columns:1.05fr .95fr;gap:56px;align-items:center}
+  @media(max-width:920px){.hero-grid{grid-template-columns:1fr;gap:40px}}
+  .hero h1{font-size:clamp(36px,5vw,58px);font-weight:800;margin:22px 0 20px}
+  .hero h1 .hl{color:var(--accent)}
+  .hero p.lead{font-size:18px;color:var(--muted);max-width:480px;margin-bottom:30px}
+  .hero-cta{display:flex;gap:14px;flex-wrap:wrap;align-items:center}
+  .hero-meta{display:flex;gap:22px;margin-top:28px;flex-wrap:wrap;color:var(--muted);font-size:14px}
+  .hero-meta span{display:flex;align-items:center;gap:7px}
+  .hero-meta svg{flex:none}
+
+  /* HERO CARD MOCKUP — CAROUSEL */
+  .mock{
+    background:var(--card);border:1px solid var(--border);border-radius:var(--radius-lg);
+    box-shadow:var(--shadow-lg);overflow:hidden;position:relative;
+    user-select:none;-webkit-user-select:none;cursor:pointer
+  }
+  .mock-bar{display:flex;align-items:center;gap:7px;padding:14px 18px;border-bottom:1px solid var(--border);background:var(--bg-2)}
+  .mock-bar i{width:11px;height:11px;border-radius:50%;display:inline-block}
+  .mock-bar .r{background:#FF5F57}.mock-bar .y{background:#FEBC2E}.mock-bar .g{background:#28C840}
+  .mock-bar .title{margin-left:10px;font-size:13px;color:var(--muted);font-weight:500}
+  .mock-body{padding:24px 24px 0;position:relative;min-height:300px}
+  /* 轮播页面 */
+  .slide{position:absolute;top:24px;left:24px;right:24px;bottom:56px;opacity:0;transform:translateX(16px);transition:opacity .45s ease,transform .45s ease;pointer-events:none}
+  .slide.active{opacity:1;transform:translateX(0);pointer-events:auto}
+  .mock-row{display:flex;justify-content:space-between;align-items:center;padding:14px 0;border-bottom:1px dashed var(--border)}
+  .mock-row:last-child{border-bottom:none}
+  .mock-row .k{font-size:14px;color:var(--muted)}
+  .mock-row .v{font-size:17px;font-weight:700}
+  /* 状态标签 */
+  .status-pill{
+    display:inline-flex;align-items:center;gap:7px;
+    padding:7px 16px;border-radius:999px;font-weight:700;font-size:14px
+  }
+  .status-pill.idle{background:var(--bg-2);color:var(--ink-2)}
+  .status-pill.recording{background:var(--accent-soft);color:var(--accent)}
+  .status-pill.playing{background:#E9F5FF;color:#2563EB}
+  .status-pill.paused{background:#FFF4E0;color:#D97706}
+  .status-pill .live{width:8px;height:8px;border-radius:50%;background:currentColor;animation:pulse 1.4s infinite}
+  /* 进度条 */
+  .progress-wrap{margin-top:14px;background:var(--bg-2);border-radius:999px;height:12px;overflow:hidden}
+  .progress-fill{height:100%;border-radius:999px;background:linear-gradient(90deg,var(--accent),var(--accent-2));transition:width .3s ease;width:0%}
+  /* 循环模式行 */
+  .loop-row{display:flex;justify-content:space-between;align-items:center;margin-top:12px;font-size:13px}
+  .loop-mode{display:flex;gap:6px}
+  .loop-opt{padding:4px 10px;border-radius:7px;border:1px solid var(--border);color:var(--muted);font-weight:600;font-size:12px;transition:all .2s}
+  .loop-opt.active{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+  /* 鼠标动画 */
+  .cursor-demo{position:absolute;right:26px;bottom:26px;font-size:30px;transition:opacity .3s}
+  @keyframes moveCursor{
+    0%{transform:translate(0,0)}25%{transform:translate(-30px,-18px)}
+    50%{transform:translate(-12px,14px)}75%{transform:translate(18px,-6px)}
+    100%{transform:translate(0,0)}
+  }
+  .cursor-demo.moving{animation:moveCursor 4s ease-in-out infinite}
+  /* 底部页码指示器 — 固定在卡片最底部 */
+  .carousel-dots{display:flex;justify-content:center;gap:10px;padding:18px 0 16px;border-top:1px dashed var(--border);position:relative;z-index:2}
+  .dot-btn{
+    width:12px;height:12px;border-radius:50%;background:var(--border);
+    border:none;cursor:pointer;transition:all .3s ease;padding:0;flex:none
+  }
+  .dot-btn.active{background:var(--accent);transform:scale(1.35);box-shadow:0 0 8px rgba(255,84,54,.40)}
+  .dot-btn:hover:not(.active){background:var(--muted)}
+
+  /* SECTION SHELL */
+  section{padding:84px 0}
+  .sec-head{max-width:640px;margin:0 auto 52px;text-align:center}
+  .sec-head h2{font-size:clamp(28px,3.6vw,40px);font-weight:800;margin:16px 0 14px}
+  .sec-head p{font-size:17px;color:var(--muted)}
+
+  /* FEATURES */
+  .feat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+  @media(max-width:860px){.feat-grid{grid-template-columns:repeat(2,1fr)}}
+  @media(max-width:560px){.feat-grid{grid-template-columns:1fr}}
+  .feat{
+    background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
+    padding:26px;box-shadow:var(--shadow-sm);transition:transform .2s,box-shadow .2s,border-color .2s
+  }
+  .feat:hover{transform:translateY(-4px);box-shadow:var(--shadow-md);border-color:#E0DDD5}
+  .feat .ic{
+    width:46px;height:46px;border-radius:13px;background:var(--accent-soft);
+    display:grid;place-items:center;color:var(--accent);margin-bottom:16px
+  }
+  .feat h3{font-size:18px;font-weight:700;margin-bottom:8px}
+  .feat p{font-size:14.5px;color:var(--muted)}
+
+  /* HOW IT WORKS */
+  .steps-wrap{display:grid;grid-template-columns:repeat(3,1fr);gap:0;position:relative}
+  @media(max-width:760px){.steps-wrap{grid-template-columns:1fr;gap:8px}}
+  .step{position:relative;padding:30px 26px;background:var(--card);border:1px solid var(--border);border-radius:var(--radius);margin:0 10px;box-shadow:var(--shadow-sm)}
+  .step .num{
+    width:40px;height:40px;border-radius:50%;background:var(--ink);color:#fff;
+    display:grid;place-items:center;font-weight:800;font-size:18px;margin-bottom:16px
+  }
+  .step:nth-child(2) .num{background:var(--accent)}
+  .step h3{font-size:19px;font-weight:700;margin-bottom:8px}
+  .step p{font-size:14.5px;color:var(--muted)}
+  .step .kbd{display:inline-block;margin-top:12px;font-size:12.5px;font-weight:600;color:var(--ink-2);background:var(--bg-2);border:1px solid var(--border);border-radius:7px;padding:4px 10px}
+
+  /* USE CASES */
+  .case-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:18px}
+  @media(max-width:920px){.case-grid{grid-template-columns:repeat(2,1fr)}}
+  @media(max-width:520px){.case-grid{grid-template-columns:1fr}}
+  .case{
+    background:var(--card);border:1px solid var(--border);border-radius:var(--radius);
+    padding:24px 22px;box-shadow:var(--shadow-sm);transition:transform .2s,box-shadow .2s
+  }
+  .case:hover{transform:translateY(-4px);box-shadow:var(--shadow-md)}
+  .case .emoji{font-size:30px;margin-bottom:12px}
+  .case h3{font-size:16.5px;font-weight:700;margin-bottom:7px}
+  .case p{font-size:13.5px;color:var(--muted)}
+
+  /* DOWNLOAD */
+  .dl{background:linear-gradient(135deg,#1F1F23,#2C2C33);color:#fff;border-radius:var(--radius-lg);padding:56px;box-shadow:var(--shadow-lg);position:relative;overflow:hidden}
+  @media(max-width:680px){.dl{padding:38px 26px}}
+  .dl::after{content:"";position:absolute;right:-80px;top:-80px;width:280px;height:280px;border-radius:50%;background:radial-gradient(circle,rgba(255,84,54,.35),transparent 70%)}
+  .dl-inner{position:relative;z-index:1;display:flex;align-items:center;justify-content:space-between;gap:34px;flex-wrap:wrap}
+  .dl h2{font-size:clamp(26px,3.4vw,36px);font-weight:800;margin-bottom:12px}
+  .dl p{color:rgba(255,255,255,.72);max-width:440px;font-size:15.5px}
+  .dl .meta{display:flex;gap:26px;margin-top:20px;flex-wrap:wrap;font-size:13.5px;color:rgba(255,255,255,.6)}
+  .dl .meta b{color:#fff;font-weight:700}
+  .dl .btn-accent{font-size:16px;padding:16px 34px}
+
+  /* FOOTER */
+  footer{border-top:1px solid var(--border);padding:40px 0;color:var(--muted);font-size:14px}
+  .foot{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px}
+  .foot .logo{font-size:17px}
+  .foot-links{display:flex;gap:10px;align-items:center}
+  .foot-links a{
+    padding:5px 14px;border-radius:999px;border:1px solid var(--border);
+    background:var(--card);color:var(--ink-2);text-decoration:none;
+    font-size:13px;font-weight:600;transition:all .25s ease
+  }
+  .foot-links a:hover{background:var(--accent);color:#fff;border-color:var(--accent)}
+
+  /* REVEAL ANIM */
+  .reveal{opacity:0;transform:translateY(24px);transition:opacity .7s ease,transform .7s ease}
+  .reveal.in{opacity:1;transform:none}
+
+  /* SPONSOR BUTTON */
+  .sponsor-btn{
+    background:var(--accent-soft);color:var(--accent);border:1px solid var(--accent);
+    padding:5px 14px;border-radius:999px;font-size:13px;font-weight:700;
+    cursor:pointer;transition:all .25s ease
+  }
+  .sponsor-btn:hover{background:var(--accent);color:#fff;transform:scale(1.05)}
+  /* SPONSOR MODAL */
+  .sponsor-overlay{
+    position:fixed;inset:0;background:rgba(0,0,0,.55);
+    display:flex;align-items:center;justify-content:center;z-index:9999;
+    opacity:0;pointer-events:none;transition:opacity .3s ease;backdrop-filter:blur(4px)
+  }
+  .sponsor-overlay.show{opacity:1;pointer-events:auto}
+  .sponsor-modal{
+    background:#fff;border-radius:20px;padding:32px 28px 28px;text-align:center;
+    box-shadow:0 24px 80px rgba(0,0,0,.22);max-width:340px;width:90%;
+    transform:scale(.92) translateY(16px);transition:transform .35s ease;
+    position:relative
+  }
+  .sponsor-overlay.show .sponsor-modal{transform:scale(1) translateY(0)}
+  .sponsor-close{
+    position:absolute;top:10px;right:14px;background:none;border:none;
+    font-size:26px;color:#999;cursor:pointer;line-height:1;padding:4px 8px;
+    border-radius:50%;transition:all .2s
+  }
+  .sponsor-close:hover{color:#333;background:#f0f0f0}
+  .sponsor-title{font-size:17px;font-weight:700;margin-bottom:18px;color:var(--ink)}
+  .sponsor-qr{width:260px;height:260px;object-fit:contain;border-radius:12px;display:inline-block}
+  .sponsor-hint{margin-top:14px;font-size:13.5px;color:var(--muted)}
+</style>
+</head>
+<body>
+
+<header id="hdr">
+  <div class="wrap nav">
+    <div class="logo">
+      <span class="mark">🐭</span>
+      <span>鼠小侠</span>
+    </div>
+    <nav class="nav-links">
+      <a href="#features">功能</a>
+      <a href="#how">使用原理</a>
+      <a href="#cases">适用场景</a>
+      <a href="#download">下载</a>
+    </nav>
+    </nav>
+  </div>
+</header>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="wrap hero-grid">
+    <div class="reveal">
+      <span class="eyebrow"><span class="dot"></span>Windows 键鼠录制回放工具 · v3.0</span>
+      <h1>录一遍，<br><span class="hl">自动重演</span>无数遍。</h1>
+      <p class="lead">鼠小侠记录你的鼠标键盘操作，再以微秒级精度精确回放。重复的点击、填写、操作，从此交给它。</p>
+      <div class="hero-cta">
+        <a href="https://github.com/yangxivi/shuxiaoxia/releases/download/v1.0.0/shuxiaoxia.exe" class="btn btn-accent" download>⬇ 下载鼠小侠</a>
+        <a href="#how" class="btn btn-ghost">查看使用原理</a>
+      </div>
+      <div class="hero-meta">
+        <span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FF5436" stroke-width="2.2"><path d="M20 6L9 17l-5-5"/></svg>
+          单文件 · 约 15MB
+        </span>
+        <span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FF5436" stroke-width="2.2"><path d="M20 6L9 17l-5-5"/></svg>
+          Windows 10 / 11
+        </span>
+        <span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#FF5436" stroke-width="2.2"><path d="M20 6L9 17l-5-5"/></svg>
+          全局快捷键后台生效
+        </span>
+      </div>
+    </div>
+
+    <div class="reveal">
+      <div class="mock" id="demoCarousel">
+        <div class="mock-bar">
+          <i class="r"></i><i class="y"></i><i class="g"></i>
+          <span class="title">鼠小侠 · 曦微出品自动点击器</span>
+        </div>
+        <div class="mock-body">
+
+          <!-- 第1页：待机 -->
+          <div class="slide active" data-slide="0">
+            <div class="mock-row">
+              <span class="k">当前状态</span>
+              <span class="status-pill idle">● 待机中</span>
+            </div>
+            <div class="mock-row">
+              <span class="k">录制时长</span>
+              <span class="v" style="color:var(--muted)">--:--:--</span>
+            </div>
+            <div class="mock-row">
+              <span class="k">操作步数</span>
+              <span class="v" style="color:var(--muted)">0</span>
+            </div>
+          </div>
+
+          <!-- 第2页：录制中 -->
+          <div class="slide" data-slide="1">
+            <div class="mock-row">
+              <span class="k">当前状态</span>
+              <span class="status-pill recording"><span class="live"></span>录制中</span>
+            </div>
+            <div class="mock-row">
+              <span class="k">录制时长</span>
+              <span class="v" id="recTime">00:01:12</span>
+            </div>
+            <div class="mock-row">
+              <span class="k">操作步数</span>
+              <span class="v" id="recSteps">256</span>
+            </div>
+            <div class="cursor-demo moving">🖱️</div>
+          </div>
+
+          <!-- 第3页：回放中 -->
+          <div class="slide" data-slide="2">
+            <div class="mock-row">
+              <span class="k">当前状态</span>
+              <span class="status-pill playing"><span class="live"></span>回放中</span>
+            </div>
+            <div class="mock-row">
+              <span class="k">回放进度</span>
+              <span class="v"><span id="playProg">42</span>/256 步</span>
+            </div>
+            <div class="mock-row">
+              <span class="k">已用时间</span>
+              <span class="v" id="playTime">00:00:38</span>
+            </div>
+            <div class="progress-wrap"><div class="progress-fill" id="progBar" style="width:16%"></div></div>
+            <div class="loop-row">
+              <span style="color:var(--muted);font-weight:600">循环模式</span>
+              <div class="loop-mode">
+                <span class="loop-opt active">单次</span>
+                <span class="loop-opt">无限</span>
+                <span class="loop-opt">次数</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 第4页：已暂停 -->
+          <div class="slide" data-slide="3">
+            <div class="mock-row">
+              <span class="k">当前状态</span>
+              <span class="status-pill paused">⏸ 已暂停</span>
+            </div>
+            <div class="mock-row">
+              <span class="k">回放进度</span>
+              <span class="v">128/256 步</span>
+            </div>
+            <div class="mock-row">
+              <span class="k">已用时间</span>
+              <span class="v">00:01:15</span>
+            </div>
+            <div class="progress-wrap"><div class="progress-fill" style="width:50%;background:linear-gradient(90deg,#D97706,#F59E0B)"></div></div>
+            <div class="loop-row">
+              <span style="color:var(--muted);font-weight:600">循环模式</span>
+              <div class="loop-mode">
+                <span class="loop-opt">单次</span>
+                <span class="loop-opt active" style="border-color:#D97706;color:#D97706;background:#FFF4E0">无限</span>
+                <span class="loop-opt">次数</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 底部页码指示器（固定在卡片最底部） -->
+          <div class="carousel-dots" id="carouselDots">
+            <button class="dot-btn active" data-go="0"></button>
+            <button class="dot-btn" data-go="1"></button>
+            <button class="dot-btn" data-go="2"></button>
+            <button class="dot-btn" data-go="3"></button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<section id="features">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="eyebrow"><span class="dot"></span>核心能力</span>
+      <h2>为"重复"而生的每一处细节</h2>
+      <p>不只是录制回放，更在意回放得准不准、用得顺不顺。</p>
+    </div>
+    <div class="feat-grid">
+      <div class="feat reveal">
+        <div class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M9 9l6 6M15 9l-6 6"/></svg></div>
+        <h3>全局快捷键</h3>
+        <p>F7 录制、F8 停止、F10 回放……热键后台全局生效，无需激活软件窗口，随手就能操控。</p>
+      </div>
+      <div class="feat reveal">
+        <div class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div>
+        <h3>微秒级精度</h3>
+        <p>采用 perf_counter 实现微秒级时间控制，回放节奏与录制分毫不差，1 倍速原样重现。</p>
+      </div>
+      <div class="feat reveal">
+        <div class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v18M5 8l7-5 7 5"/></svg></div>
+        <h3>滚轮精确匹配</h3>
+        <p>录制与回放使用相同 pynput API，滚动方向与距离 1:1 一致，不再担心多滚一行。</p>
+      </div>
+      <div class="feat reveal">
+        <div class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 12a8 8 0 1 1 2.3 5.6"/><path d="M4 12V7M4 12h5"/></svg></div>
+        <h3>三种循环模式</h3>
+        <p>单次、无限循环、指定次数循环，挂机、批量、压测想怎么跑就怎么跑。</p>
+      </div>
+      <div class="feat reveal">
+        <div class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/></svg></div>
+        <h3>脚本加密保存</h3>
+        <p>脚本以 Base64 + XOR 加密存储为 .mrs，防泄露、防乱码，脚本库随开随用。</p>
+      </div>
+      <div class="feat reveal">
+        <div class="ic"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8l-9-5-9 5v8l9 5 9-5z"/><path d="M3.3 7L12 12l8.7-5M12 12v9"/></svg></div>
+        <h3>单文件便携</h3>
+        <p>一个 exe 文件即可运行，无需安装、不写注册表，放进 U 盘带走也行。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section id="how" style="background:var(--bg-2)">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="eyebrow"><span class="dot"></span>使用原理</span>
+      <h2>三步，把重复交给鼠小侠</h2>
+      <p>和 Ritto 一样朴素：你先操作一遍，剩下的让它来。</p>
+    </div>
+    <div class="steps-wrap">
+      <div class="step reveal">
+        <div class="num">1</div>
+        <h3>录制</h3>
+        <p>按下 F7（或点"开始录制"），执行一次你要重复的鼠标键盘操作，软件逐帧记录。</p>
+        <span class="kbd">F7 开始 · F8 停止</span>
+      </div>
+      <div class="step reveal">
+        <div class="num">2</div>
+        <h3>保存</h3>
+        <p>停止后按 F9 保存为 .mrs 脚本，自动加密存入脚本库，下次可随时加载复用。</p>
+        <span class="kbd">F9 保存脚本</span>
+      </div>
+      <div class="step reveal">
+        <div class="num">3</div>
+        <h3>回放</h3>
+        <p>加载脚本，选好循环模式，按 F10 精确回放。可随时 F11 暂停、F12 停止。</p>
+        <span class="kbd">F10 回放 · F11 暂停</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- USE CASES -->
+<section id="cases">
+  <div class="wrap">
+    <div class="sec-head reveal">
+      <span class="eyebrow"><span class="dot"></span>适用场景</span>
+      <h2>同一套方法，用在无数重复里</h2>
+      <p>凡是"步骤固定、需要重复"的操作，鼠小侠都能替你跑完。</p>
+    </div>
+    <div class="case-grid">
+      <div class="case reveal">
+        <div class="emoji">📋</div>
+        <h3>批量填表</h3>
+        <p>把相同流程套到不同数据上，逐份填入表单、系统、Excel，省下机械劳动。</p>
+      </div>
+      <div class="case reveal">
+        <div class="emoji">🎮</div>
+        <h3>游戏日常</h3>
+        <p>每日签到、固定采集、重复刷本，设定无限循环，挂机也能稳定执行。</p>
+      </div>
+      <div class="case reveal">
+        <div class="emoji">🧪</div>
+        <h3>自动化测试</h3>
+        <p>冒烟测试、UI 巡检，录制一遍操作路径，反复回放验证界面表现。</p>
+      </div>
+      <div class="case reveal">
+        <div class="emoji">🔁</div>
+        <h3>重复点击任务</h3>
+        <p>抢购、投票、刷量等高频点击场景，精确复现你的每一次操作。</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- DOWNLOAD -->
+<section id="download">
+  <div class="wrap">
+    <div class="dl reveal">
+      <div class="dl-inner">
+        <div>
+          <h2>把重复点击，交给鼠小侠</h2>
+          <p>免费、单文件、即开即用。录一遍，剩下的交给它。</p>
+          <div class="meta">
+            <span><b>v3.0</b> 最新版本</span>
+            <span><b>≈15MB</b> 单文件</span>
+            <span><b>Win 10/11</b> 支持系统</span>
+          </div>
+        </div>
+        <div>
+          <a href="https://github.com/yangxivi/shuxiaoxia/releases/download/v1.0.0/shuxiaoxia.exe" class="btn btn-accent" id="dlBtn" download>⬇ 立即下载 .exe</a>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap foot">
+    <div class="logo">
+      <span class="mark">🐭</span>
+      <span>鼠小侠</span>
+    </div>
+    <div class="foot-links">
+      <button class="sponsor-btn" id="contactBtn" title="联系作者">💬 联系作者</button>
+      <button class="sponsor-btn" id="sponsorBtn" title="赞助作者">☕ 赞助作者</button>
+      <button class="sponsor-btn" id="backTopBtn" title="回到顶部">↑ 回到顶部</button>
+    </div>
+    <div>曦微出品 · © 2026 鼠小侠</div>
+  </div>
+</footer>
+
+<!-- 赞助弹窗 -->
+<div class="sponsor-overlay" id="sponsorOverlay">
+  <div class="sponsor-modal">
+    <button class="sponsor-close" id="sponsorClose">&times;</button>
+    <p class="sponsor-title">☕ 觉得好用？请作者喝杯咖啡</p>
+    <img src="sponsor.png" alt="微信收款码" class="sponsor-qr">
+    <p class="sponsor-hint">微信扫一扫 · 感谢支持</p>
+  </div>
+</div>
+
+<!-- 联系作者弹窗 -->
+<div class="sponsor-overlay" id="contactOverlay">
+  <div class="sponsor-modal">
+    <button class="sponsor-close" id="contactClose">&times;</button>
+    <p class="sponsor-title">💬 联系作者</p>
+    <img src="contact-qrcode.jpg" alt="微信二维码" class="sponsor-qr">
+    <p class="sponsor-hint">微信扫一扫 · 添加好友</p>
+  </div>
+</div>
+
+<script>
+  // 导航栏滚动态
+  const hdr=document.getElementById('hdr');
+  window.addEventListener('scroll',()=>{hdr.classList.toggle('scrolled',window.scrollY>20)});
+
+  // 滚动揭示动画
+  const io=new IntersectionObserver((es)=>{
+    es.forEach(e=>{if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target)}});
+  },{threshold:.12});
+  document.querySelectorAll('.reveal').forEach((el,i)=>{
+    el.style.transitionDelay=(i%3*0.08)+'s';
+    io.observe(el);
+  });
+
+  /* ========== 轮播演示卡片 ========== */
+  const carousel=document.getElementById('demoCarousel');
+  const slides=carousel.querySelectorAll('.slide');
+  const dots=carousel.querySelectorAll('.dot-btn');
+  let cur=0,total=slides.length,autoTimer=null,AUTO_MS=3800;
+
+  function goTo(n){
+    if(n<0)n=total-1;if(n>=total)n=0;
+    cur=n;
+    slides.forEach((s,i)=>{s.classList.toggle('active',i===cur)});
+    dots.forEach((d,i)=>{d.classList.toggle('active',i===cur)});
+  }
+  function next(){goTo(cur+1)}
+  function startAuto(){stopAuto();autoTimer=setInterval(next,AUTO_MS)}
+  function stopAuto(){clearInterval(autoTimer)}
+
+  // 点击卡片或圆点 → 手动切换（暂停自动后恢复）
+  carousel.addEventListener('click',(e)=>{
+    if(e.target.closest('.dot-btn')){
+      stopAuto();goTo(+e.target.dataset.go);startAuto();
+      return;
+    }
+    stopAuto();next();startAuto();
+  });
+  dots.forEach(d=>d.addEventListener('click',e=>{e.stopPropagation()}));
+
+  // 启动自动轮播
+  startAuto();
+
+  /* ========== 各页面实时数据跳动 ========== */
+  let recSec=72,recSteps=256;
+  setInterval(()=>{
+    recSec++;recSteps+=Math.floor(Math.random()*5);
+    const m=String(Math.floor(recSec/60)).padStart(2,'0'),ss=String(recSec%60).padStart(2,'0');
+    const tEl=document.getElementById('recTime'),sEl=document.getElementById('recSteps');
+    if(tEl)tEl.textContent=`00:${m}:${ss}`;
+    if(sEl)sEl.textContent=recSteps;
+  },1000);
+
+  let playProg=42,playSec=38;
+  setInterval(()=>{
+    playProg=Math.min(256,playProg+Math.floor(Math.random()*3));
+    playSec++;
+    const pp=document.getElementById('playProg'),pt=document.getElementById('playTime'),pb=document.getElementById('progBar');
+    if(pp)pp.textContent=playProg;
+    if(pt){const pm=String(Math.floor(playSec/60)).padStart(2,'0'),ps=String(playSec%60).padStart(2,'0');pt.textContent=`00:${pm}:${ps}`}
+    if(pb)pb.style.width=(playProg/256*100)+'%';
+  },1000);
+
+  // 赞助弹窗
+  const sponsorBtn=document.getElementById('sponsorBtn');
+  const sponsorOverlay=document.getElementById('sponsorOverlay');
+  const sponsorClose=document.getElementById('sponsorClose');
+  function openSponsor(){sponsorOverlay.classList.add('show');document.body.style.overflow='hidden'}
+  function closeSponsor(){sponsorOverlay.classList.remove('show');document.body.style.overflow=''}
+  sponsorBtn.addEventListener('click',openSponsor);
+  sponsorClose.addEventListener('click',closeSponsor);
+  sponsorOverlay.addEventListener('click',e=>{if(e.target===sponsorOverlay)closeSponsor()});
+
+  // 联系作者弹窗
+  const contactBtn=document.getElementById('contactBtn');
+  const contactOverlay=document.getElementById('contactOverlay');
+  const contactClose=document.getElementById('contactClose');
+  function openContact(){contactOverlay.classList.add('show');document.body.style.overflow='hidden'}
+  function closeContact(){contactOverlay.classList.remove('show');document.body.style.overflow=''}
+  contactBtn.addEventListener('click',openContact);
+  contactClose.addEventListener('click',closeContact);
+  contactOverlay.addEventListener('click',e=>{if(e.target===contactOverlay)closeContact()});
+
+  // ESC 关闭任意弹窗
+  document.addEventListener('keydown',e=>{
+    if(e.key==='Escape'){
+      if(sponsorOverlay.classList.contains('show'))closeSponsor();
+      if(contactOverlay.classList.contains('show'))closeContact();
+    }
+  });
+
+  // 回到顶部
+  document.getElementById('backTopBtn').addEventListener('click',()=>{
+    window.scrollTo({top:0,behavior:'smooth'});
+  });
+</script>
+</body>
+</html>
