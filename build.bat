@@ -1,46 +1,66 @@
 @echo off
-chcp 65001 >nul
-REM ================================================================================
-REM 鼠小侠 - 一键打包脚本
-REM ================================================================================
-REM 功能：自动安装依赖并打包为单文件exe
-REM 使用：双击运行即可
-REM ================================================================================
+setlocal enabledelayedexpansion
+cd /d "%~dp0"
 
-echo.
-echo ========================================
-echo   鼠小侠 - 一键打包脚本
-echo ========================================
-echo.
+set PYTHON_PATH=
 
-REM 设置Python路径（根据实际环境修改）
-set PYTHON_PATH=C:\Users\Administrator\.real\.bin\python-3.12-windows-x64\python.exe
-
-REM 检查Python是否存在
-if not exist "%PYTHON_PATH%" (
-    echo [错误] 未找到Python解释器，请修改脚本中的PYTHON_PATH变量
-    echo 当前设置的路径: %PYTHON_PATH%
-    pause
-    exit /b 1
+for %%P in (
+  "D:/��С��/buildenv/py310/python.exe"
+  "C:/Users/Administrator/.workbuddy/binaries/python/versions/3.13.12/python.exe"
+  "C:/Users/Administrator/AppData/Local/Programs/Python/Python310/python.exe"
+  "C:/Users/Administrator/AppData/Local/Programs/Python/Python311/python.exe"
+  "C:/Users/Administrator/AppData/Local/Programs/Python/Python312/python.exe"
+  "C:/Users/Administrator/AppData/Local/Programs/Python/Python313/python.exe"
+) do (
+  if exist "%%~P" (
+    "%%~P" -c "import tkinter" >nul 2>nul
+    if !errorlevel! equ 0 (
+      set "PYTHON_PATH=%%~P"
+      goto :found
+    )
+  )
 )
 
-echo [步骤1] 检查并安装依赖...
-echo.
-%PYTHON_PATH% -m pip install pyautogui pynput pyinstaller --user -q
+for %%P in (python py) do (
+  where %%~P >nul 2>nul
+  if !errorlevel! equ 0 (
+    for %%Q in (%%~P) do (
+      %%~Q -c "import tkinter" >nul 2>nul
+      if !errorlevel! equ 0 (
+        set "PYTHON_PATH=%%~Q"
+        goto :found
+      )
+    )
+  )
+)
 
-echo [步骤2] 开始打包...
-echo.
-%PYTHON_PATH% -m PyInstaller --noconfirm --onefile --windowed --name "鼠小侠" --collect-submodules pynput --collect-submodules pyautogui mouse_recorder_pro.py
+echo [ERROR] No Python with tkinter found.
+pause
+exit /b 1
 
-echo.
-echo ========================================
-if exist "dist\鼠小侠.exe" (
-    echo   打包成功！
-    echo   输出文件: dist\鼠小侠.exe
+:found
+echo [INFO] Using Python: !PYTHON_PATH!
+
+echo [STEP 1] Install dependencies...
+"!PYTHON_PATH!" -m pip install --quiet pyautogui pynput pyinstaller
+if errorlevel 1 (
+  echo [ERROR] pip install failed.
+  pause
+  exit /b 1
+)
+
+echo [STEP 2] Build exe with PyInstaller...
+"!PYTHON_PATH!" -m PyInstaller --noconfirm --clean ��С��.spec
+if errorlevel 1 (
+  echo [ERROR] Build failed.
+  pause
+  exit /b 1
+)
+
+if exist "dist\��С��.exe" (
+  echo [OK] Build success: dist\��С��.exe
 ) else (
-    echo   打包失败，请检查错误信息
+  echo [ERROR] dist\��С��.exe not found.
 )
-echo ========================================
-echo.
 
 pause

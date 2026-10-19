@@ -1,25 +1,47 @@
 @echo off
-chcp 65001 >nul
+setlocal enabledelayedexpansion
 cd /d "%~dp0"
 
-echo ========================================
-echo   鼠小侠 - PyInstaller 打包脚本
-echo ========================================
-echo.
+set PYTHON_PATH=
 
-echo 正在打包...
-pyinstaller --clean --noconfirm 鼠小侠.spec
-
-if %errorlevel% equ 0 (
-    echo.
-    echo ========================================
-    echo   打包成功！
-    echo   输出文件：dist\鼠小侠.exe
-    echo ========================================
-) else (
-    echo.
-    echo 打包失败，请查看上方错误信息
+for %%P in (
+  "D:/��С��/buildenv/py310/python.exe"
+  "C:/Users/Administrator/.workbuddy/binaries/python/versions/3.13.12/python.exe"
+  "C:/Users/Administrator/AppData/Local/Programs/Python/Python310/python.exe"
+  "C:/Users/Administrator/AppData/Local/Programs/Python/Python311/python.exe"
+  "C:/Users/Administrator/AppData/Local/Programs/Python/Python312/python.exe"
+  "C:/Users/Administrator/AppData/Local/Programs/Python/Python313/python.exe"
+) do (
+  if exist "%%~P" (
+    "%%~P" -c "import tkinter" >nul 2>nul
+    if !errorlevel! equ 0 (
+      set "PYTHON_PATH=%%~P"
+      goto :found
+    )
+  )
 )
 
-echo.
+echo [ERROR] No Python with tkinter found.
+pause
+exit /b 1
+
+:found
+echo [INFO] Using Python: !PYTHON_PATH!
+
+echo [STEP] Install dependencies...
+"!PYTHON_PATH!" -m pip install --quiet pyautogui pynput pyinstaller
+echo [STEP] Build exe...
+"!PYTHON_PATH!" -m PyInstaller --noconfirm --clean ��С��.spec
+if errorlevel 1 (
+  echo [ERROR] Build failed.
+  pause
+  exit /b 1
+)
+
+if exist "dist\��С��.exe" (
+  echo [OK] dist\��С��.exe
+) else (
+  echo [ERROR] dist\��С��.exe not found.
+)
+
 pause

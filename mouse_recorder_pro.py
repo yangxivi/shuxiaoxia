@@ -3,7 +3,7 @@
 ================================================================================
 鼠小侠 - 轻量化键鼠录制回放工具 (Windows 桌面端)
 ================================================================================
-版本：v3.0
+版本：v4.0
 开发语言：Python 3.10+
 GUI框架：tkinter（内置轻量化）
 底层库：pynput（全局监听）、pyautogui（模拟回放）、json（脚本存储）
@@ -38,6 +38,13 @@ from datetime import datetime
 import pyautogui
 from pynput import mouse, keyboard
 
+# Windows 下尽量提高定时精度（仅影响回放计时，不改变录制事件流）
+if os.name == "nt":
+    try:
+        ctypes.windll.winmm.timeBeginPeriod(1)
+    except Exception:
+        pass
+
 
 # ================================================================================
 # 全局配置
@@ -49,7 +56,7 @@ pyautogui.PAUSE = 0         # 不在动作间插入额外停顿
 
 # 应用信息
 APP_NAME = "鼠小侠"
-APP_VERSION = "v3.0"
+APP_VERSION = "v4.0"
 APP_AUTHOR = "资深桌面端Python开发工程师"
 
 # 加密密钥（用于JSON脚本加密，防止乱码）
@@ -69,13 +76,20 @@ class AppState(Enum):
 
 class MouseActionType(Enum):
     """鼠标动作类型枚举"""
-    MOVE = "move"               # 普通移动（无按键）
+    MOVE = "move"               # 普通移动（无按键 / 悬停）
     LEFT_CLICK = "left_click"   # 左键单击
     LEFT_DOUBLE = "left_double" # 左键双击
     RIGHT_CLICK = "right_click" # 右键单击
-    LEFT_DRAG = "left_drag"     # 左键拖动（按下左键后移动）
+    RIGHT_DOUBLE = "right_double" # 右键双击
+    MIDDLE_CLICK = "middle_click" # 中键单击（等同滚轮按下）
+    MIDDLE_DOUBLE = "middle_double" # 中键双击
+    X1_CLICK = "x1_click"       # 侧键1单击（通常=浏览器后退）
+    X2_CLICK = "x2_click"       # 侧键2单击（通常=浏览器前进）
+    LEFT_DRAG = "left_drag"     # 左键拖动（按下左键后移动 / 框选 / 窗口拖动）
     RIGHT_DRAG = "right_drag"   # 右键拖动（按下右键后移动）
-    SCROLL = "scroll"           # 滚轮
+    MIDDLE_DRAG = "middle_drag" # 中键拖动（按下中键后移动 / 平移视图）
+    MOUSE_RELEASE = "mouse_release" # 鼠标按键释放（按下后抬起，用于“按住不点”和拖拽结束）
+    SCROLL = "scroll"           # 滚轮（垂直/水平；Ctrl+滚轮缩放、Shift+滚轮横向由键盘修饰键事件承担）
     KEYFRAME = "keyframe"       # 关键帧标记（空格键触发）
 
 
@@ -111,7 +125,9 @@ class MouseAction:
     key_char: str = ""             # 键盘按键字符
     key_code: int = 0              # 键盘按键VK码
     key_is_press: bool = True      # True=按下, False=释放
+    key_name: str = ""             # pynput 按键稳定名称，回放优先使用
     is_hotkey: bool = False        # 是否是快捷键按键（F7/F8/F9/F10/F11/F12/ESC）
+    mouse_button: str = ""         # 鼠标动作的按键名：left/right/middle/x1/x2，用于 mouse_release 等
     
     def to_dict(self) -> Dict[str, Any]:
         """转换为字典格式"""
@@ -134,6 +150,7 @@ class MouseAction:
             key_char=data.get("key_char", ""),
             key_code=data.get("key_code", 0),
             key_is_press=data.get("key_is_press", True),
+            key_name=data.get("key_name", ""),
             is_hotkey=data.get("is_hotkey", False)
         )
 
@@ -181,10 +198,17 @@ class MouseEventListener:
         self._last_left_click_time: float = 0.0
         self._last_left_click_pos: tuple = (0, 0)
         
-        # 按键状态追踪（用于识别拖动）
-        self._is_left_pressed = False
-        self._is_right_pressed = False
+        # 按键状态追踪（用于识别拖动 / 中键 / 侧键）
+        self._pressed_buttons = {}   # 各鼠标按键是否处于按下状态：left/right/middle/x1/x2
+        self._drag_started = {}      # 各按键在“按下→抬起”之间是否发生过移动（用于区分单击/拖拽）
+        self._press_time = {}        # 各按键最近一次按下的时间
+        self._press_pos = {}         # 各按键最近一次按下的坐标
         
+        # 单击/双击检测（按按键分别记录）
+        self._last_click_time = {}
+        self._last_click_pos = {}
+        self._last_click_single = {}  # 上一次是否为“单击”（用于判定下一次是否为双击）
+
         # 滚动事件合并缓冲（解决连续滚动记录不充分的问题）
         self._scroll_buffer_dy = 0
         self._scroll_buffer_dx = 0
@@ -199,9 +223,10 @@ class MouseEventListener:
         
         # 记录已按下的按键（用于避免重复事件）
         self._pressed_keys = set()
+
         
-        # 快捷键按键集合（不记录到录制中）
-        self._hotkey_keys = {'f9', 'f10', 'f11', 'esc', 'space', 'Key.f9', 'Key.f10', 'Key.f11', 'Key.esc', 'Key.space'}
+        # 快捷键按键集合（不记录到录制中；Space 保留用于关键帧，不参与录制内容）
+        self._hotkey_keys = {'f7', 'f8', 'f9', 'f10', 'f11', 'f12', 'esc', 'space', 'Key.f7', 'Key.f8', 'Key.f9', 'Key.f10', 'Key.f11', 'Key.f12', 'Key.esc', 'Key.space'}
     
     # -------------------------------------------------------------------------
     # 公共接口
@@ -224,8 +249,13 @@ class MouseEventListener:
         self._record_start_time = time.time()
         self._keyframe_requested = False
         # 重置按键状态
-        self._is_left_pressed = False
-        self._is_right_pressed = False
+        self._pressed_buttons = {}
+        self._drag_started = {}
+        self._press_time = {}
+        self._press_pos = {}
+        self._last_click_time = {}
+        self._last_click_pos = {}
+        self._last_click_single = {}
         # 重置滚动缓冲
         self._scroll_buffer_dy = 0
         self._scroll_buffer_dx = 0
@@ -301,7 +331,8 @@ class MouseEventListener:
     
     def _create_action(self, action_type: MouseActionType, 
                        x: int, y: int, 
-                       scroll_dy: int = 0, scroll_dx: int = 0) -> MouseAction:
+                       scroll_dy: int = 0, scroll_dx: int = 0,
+                       mouse_button: str = "") -> MouseAction:
         """
         创建鼠标动作对象
         
@@ -310,6 +341,7 @@ class MouseEventListener:
             x, y: 坐标
             scroll_dy: 滚轮垂直滚动量
             scroll_dx: 滚轮水平滚动量
+            mouse_button: 鼠标动作的按键名（left/right/middle/x1/x2），用于 mouse_release 等
         """
         now = time.time()
         
@@ -334,7 +366,8 @@ class MouseEventListener:
             scroll_dx=scroll_dx,
             timestamp=now,
             is_keyframe=is_keyframe,
-            action_subtype="mouse"
+            action_subtype="mouse",
+            mouse_button=mouse_button
         )
     
     def _create_key_action(self, key, is_press: bool) -> Optional[MouseAction]:
@@ -359,24 +392,25 @@ class MouseEventListener:
         key_identifier = ""
         key_char = ""
         key_code = 0
-        
+        key_name = ""
+
         try:
+            key_name = self._key_to_stable_name(key)
+            key_identifier = key_name or str(key)
+
             if hasattr(key, 'char') and key.char is not None:
-                # 普通字符键
                 key_char = key.char
-                key_identifier = key_char
-            elif hasattr(key, 'name'):
-                # 特殊键（如Key.space, Key.enter等）
-                key_identifier = key.name
-                key_char = key.name
-            elif hasattr(key, 'vk'):
-                key_code = key.vk
-                key_identifier = f"vk_{key.vk}"
-                key_char = key_identifier
-            
+
+            if hasattr(key, 'vk') and key.vk is not None:
+                key_code = int(key.vk)
+
+            if not key_identifier:
+                key_identifier = key_char or f"vk_{key_code}" if key_code else str(key)
+
+
             # 获取当前鼠标位置
             current_x, current_y = mouse.Controller().position
-            
+
             return MouseAction(
                 action_type="key_press" if is_press else "key_release",
                 x=int(current_x),
@@ -391,14 +425,65 @@ class MouseEventListener:
                 key_char=key_char,
                 key_code=key_code,
                 key_is_press=is_press,
+                key_name=key_name,
                 is_hotkey=False
             )
         except Exception:
             return None
+
+    def _key_identity(self, key) -> str:
+        """生成按下/释放去重用的稳定标识。
+
+        关键：用 vk（物理键码）作为主键，因为 vk 不会随修饰键（Ctrl/Shift/Alt）改变，
+        而 `str(key)` 在修饰键按下时 char 会变成 None，导致“按下”和“释放”两次事件的
+        字符串不一致，进而使按键卡在 `_pressed_keys` 里、后续同键被误判为重复而丢弃。
+        这正是 Ctrl+C / Ctrl+V 等组合键录制丢失的根因之一。
+        """
+        try:
+            if isinstance(key, keyboard.KeyCode):
+                vk = getattr(key, 'vk', 0) or 0
+                if vk:
+                    return f"vk_{vk}"
+            if isinstance(key, keyboard.Key):
+                return f"key.{key.name}"
+            char = getattr(key, 'char', None)
+            if char is not None:
+                return char
+            name = getattr(key, 'name', '')
+            if name:
+                return name
+            return str(key)
+        except Exception:
+            return str(key)
+
+    def _key_to_stable_name(self, key) -> str:
+        """把 pynput 按键转成稳定名称，优先保存修饰键左右侧和特殊键。"""
+        try:
+            if isinstance(key, keyboard.Key):
+                return key.name
+            if isinstance(key, keyboard.KeyCode):
+                vk = getattr(key, 'vk', 0) or 0
+                if vk:
+                    return f"vk_{vk}"
+                char = getattr(key, 'char', None)
+                if char is not None:
+                    return key.char.upper() if char.isascii() else char
+            char = getattr(key, 'char', None)
+            if char is not None:
+                return char.upper() if char.isascii() else char
+            name = getattr(key, 'name', '')
+            if name:
+                return name
+            return str(key)
+        except Exception:
+            return str(key)
     
     def _is_hotkey(self, key) -> bool:
         """判断按键是否是快捷键（不应记录到录制中）"""
         try:
+            stable_name = self._key_to_stable_name(key)
+            if stable_name in self._hotkey_keys:
+                return True
             if hasattr(key, 'name'):
                 if key.name in ('f7', 'f8', 'f9', 'f10', 'f11', 'f12', 'esc'):
                     return True
@@ -409,70 +494,128 @@ class MouseEventListener:
             pass
         return False
     
-    def _on_move(self, x: int, y: int):
-        """鼠标移动回调 - 根据按键状态识别普通移动和拖动"""
-        if not self._is_recording:
-            return
-        if self._should_ignore():
-            return
-        
-        # 根据按键状态确定动作类型
-        if self._is_left_pressed:
-            # 左键拖动
-            action = self._create_action(MouseActionType.LEFT_DRAG, int(x), int(y))
-        elif self._is_right_pressed:
-            # 右键拖动
-            action = self._create_action(MouseActionType.RIGHT_DRAG, int(x), int(y))
-        else:
-            # 普通移动
-            action = self._create_action(MouseActionType.MOVE, int(x), int(y))
-        
-        self.on_action(action)
-    
-    def _on_click(self, x: int, y: int, button, pressed: bool):
-        """鼠标点击回调 - 追踪按键状态并识别单击/双击"""
-        if not self._is_recording:
-            return
-        if self._should_ignore():
-            return
-        
-        now = time.time()
-        
+    def _button_name(self, button) -> Optional[str]:
+        """把 pynput 鼠标按键映射为内部名称：left/right/middle/x1/x2。"""
         if button == mouse.Button.left:
-            if pressed:
-                # 左键按下，记录状态
-                self._is_left_pressed = True
-                
-                # 双击检测：两次左键点击间隔小于350ms且位置接近
-                time_diff = now - self._last_left_click_time
-                pos_diff = abs(x - self._last_left_click_pos[0]) + abs(y - self._last_left_click_pos[1])
-                
-                if time_diff < 0.35 and pos_diff < 10:
-                    # 双击
-                    action = self._create_action(MouseActionType.LEFT_DOUBLE, int(x), int(y))
-                    self._last_left_click_time = 0  # 重置，避免三连击误判
-                else:
-                    # 单击
-                    action = self._create_action(MouseActionType.LEFT_CLICK, int(x), int(y))
-                    self._last_left_click_time = now
-                    self._last_left_click_pos = (x, y)
-                
-                self.on_action(action)
-            else:
-                # 左键释放，清除状态
-                self._is_left_pressed = False
-        
-        elif button == mouse.Button.right:
-            if pressed:
-                # 右键按下，记录状态
-                self._is_right_pressed = True
-                # 右键单击
-                action = self._create_action(MouseActionType.RIGHT_CLICK, int(x), int(y))
-                self.on_action(action)
-            else:
-                # 右键释放，清除状态
-                self._is_right_pressed = False
-    
+            return 'left'
+        if button == mouse.Button.right:
+            return 'right'
+        if button == mouse.Button.middle:
+            return 'middle'
+        if button == mouse.Button.x1:
+            return 'x1'
+        if button == mouse.Button.x2:
+            return 'x2'
+        return None
+
+    def _on_move(self, x: int, y: int):
+        """鼠标移动回调 - 根据按键状态识别普通移动和拖动（含中键/右键拖拽）"""
+        if not self._is_recording:
+            return
+        if self._should_ignore():
+            return
+
+        # 根据当前按下的按键确定动作类型（优先级：左 > 右 > 中）
+        if self._pressed_buttons.get('left'):
+            self._record_drag('left', x, y)
+        elif self._pressed_buttons.get('right'):
+            self._record_drag('right', x, y)
+        elif self._pressed_buttons.get('middle'):
+            self._record_drag('middle', x, y)
+        else:
+            # 普通移动 / 悬停（无按键）
+            self.on_action(self._create_action(MouseActionType.MOVE, int(x), int(y)))
+
+    def _record_drag(self, bname: str, x: int, y: int):
+        """记录一次拖拽移动点，并标记该按键已进入拖拽状态。"""
+        atype = {
+            'left': MouseActionType.LEFT_DRAG,
+            'right': MouseActionType.RIGHT_DRAG,
+            'middle': MouseActionType.MIDDLE_DRAG,
+        }.get(bname)
+        if atype is None:
+            return
+        self._drag_started[bname] = True
+        self.on_action(self._create_action(atype, int(x), int(y), mouse_button=bname))
+
+    def _on_click(self, x: int, y: int, button, pressed: bool):
+        """鼠标点击回调 - 追踪按键状态，区分单击/双击/拖拽结束/中键/侧键
+
+        设计：按下时只记录状态，不立即产出动作；抬起时再判定——
+          - 抬起前发生过移动 → 这是“拖拽”，产出 mouse_release（让回放释放按键）
+          - 抬起前未移动   → 这是“单击/双击”
+        这样既能正确捕捉“按住不点”后的释放，也能让拖拽在回放时连续按住。
+        """
+        if not self._is_recording:
+            return
+        if self._should_ignore():
+            return
+
+        bname = self._button_name(button)
+        if bname is None:
+            return
+
+        now = time.time()
+
+        if pressed:
+            # 记录按下状态，等待移动/抬起来判定
+            self._pressed_buttons[bname] = True
+            self._drag_started[bname] = False
+            self._press_time[bname] = now
+            self._press_pos[bname] = (x, y)
+            return
+
+        # 抬起
+        if not self._pressed_buttons.get(bname, False):
+            return  # 多余的释放事件，丢弃
+        self._pressed_buttons[bname] = False
+
+        if self._drag_started.get(bname, False):
+            # 拖拽结束：产出释放动作，回放时据此释放按键
+            self.on_action(self._create_action(
+                MouseActionType.MOUSE_RELEASE, int(x), int(y), mouse_button=bname))
+        else:
+            # 单击 / 双击
+            self._record_click(bname, x, y, now)
+
+    def _record_click(self, bname: str, x: int, y: int, now: float):
+        """根据两次点击的时间/位置判定单击或双击，并产出对应动作。"""
+        last_t = self._last_click_time.get(bname, 0.0)
+        last_p = self._last_click_pos.get(bname, (0, 0))
+        time_diff = now - last_t
+        pos_diff = abs(x - last_p[0]) + abs(y - last_p[1])
+        is_double = (time_diff < 0.35 and pos_diff < 10
+                     and self._last_click_single.get(bname, False))
+
+        if is_double:
+            atype = self._double_click_type(bname)
+            self._last_click_time[bname] = 0.0      # 重置，避免三连击误判
+            self._last_click_single[bname] = False
+        else:
+            atype = self._single_click_type(bname)
+            self._last_click_time[bname] = now
+            self._last_click_pos[bname] = (x, y)
+            self._last_click_single[bname] = True
+
+        if atype is not None:
+            self.on_action(self._create_action(atype, int(x), int(y), mouse_button=bname))
+
+    def _single_click_type(self, bname: str) -> Optional[MouseActionType]:
+        return {
+            'left': MouseActionType.LEFT_CLICK,
+            'right': MouseActionType.RIGHT_CLICK,
+            'middle': MouseActionType.MIDDLE_CLICK,
+            'x1': MouseActionType.X1_CLICK,
+            'x2': MouseActionType.X2_CLICK,
+        }.get(bname)
+
+    def _double_click_type(self, bname: str) -> Optional[MouseActionType]:
+        return {
+            'left': MouseActionType.LEFT_DOUBLE,
+            'right': MouseActionType.RIGHT_DOUBLE,
+            'middle': MouseActionType.MIDDLE_DOUBLE,
+        }.get(bname)  # x1/x2 通常不需要双击语义，回退为单击
+
     def _on_scroll(self, x: int, y: int, dx: int, dy: int):
         """滚轮滚动回调 - 每个事件独立记录，严格 1:1 对应 pynput 的原始 dx/dy
         
@@ -513,10 +656,11 @@ class MouseEventListener:
             return
         
         # 避免重复记录：同键连续按下不重复记录
+        # 使用稳定键标识（基于 vk），避免修饰键导致 str(key) 在按下/释放时不一致
         try:
-            key_str = str(key)
+            key_str = self._key_identity(key)
             if key_str in self._pressed_keys:
-                return  # 按键已按下，忽略重复事件
+                return  # 按键已按下，忽略重复事件（如系统自动重复）
             self._pressed_keys.add(key_str)
         except Exception:
             pass
@@ -537,9 +681,9 @@ class MouseEventListener:
         if self._is_hotkey(key):
             return
         
-        # 从已按下集合中移除
+        # 从已按下集合中移除（使用与按下一致的稳定键标识）
         try:
-            key_str = str(key)
+            key_str = self._key_identity(key)
             if key_str in self._pressed_keys:
                 self._pressed_keys.remove(key_str)
         except Exception:
@@ -752,6 +896,27 @@ class ActionPlayer:
         self._mouse_controller = mouse.Controller()
         self._keyboard_controller = keyboard.Controller()
         
+        # 键盘释放顺序记录：回放时保持按下状态列表，若停止回放时仍有键未释放，则在退出前统一释放，
+        # 避免按键卡在按下状态影响后续操作。
+        self._keyboard_release_order = []
+        
+        # 鼠标拖拽状态：回放时按住左/右/中键连续拖动，必须“按下一次→连续移动→结束时释放一次”，
+        # 不能在每一段移动点都 press+release，否则目标程序的“拖选/框选”会因为按键中途弹起而失效。
+        self._mouse_pressed_left = False
+        self._mouse_pressed_right = False
+        self._mouse_pressed_middle = False
+        self._mouse_pressed_x1 = False
+        self._mouse_pressed_x2 = False
+
+        # 回放容错：统计执行失败的动作数（单条失败跳过并继续，避免整个回放被一个坏动作打断而"丢动作"）
+        self._failed_actions = 0
+        self._modifier_names = {
+            "ctrl", "ctrl_l", "ctrl_r", "alt", "alt_l", "alt_r",
+            "shift", "shift_l", "shift_r", "cmd", "cmd_l", "cmd_r",
+            "vk_0x11", "vk_0x12", "vk_0x14", "vk_0xa0", "vk_0xa1",
+            "vk_0xa2", "vk_0xa3", "vk_0xa4", "vk_0xa5", "vk_0xa6"
+        }
+        
         # 特殊键映射表（用于将pynput的特殊键名称转换为Key枚举）
         self._special_key_map = {
             'space': keyboard.Key.space,
@@ -850,6 +1015,8 @@ class ActionPlayer:
         if self._play_thread and self._play_thread.is_alive():
             self._play_thread.join(timeout=1.0)
         
+        # 确保遗留的鼠标拖拽按键被释放
+        self._release_held_mouse_buttons()
         self._is_playing = False
         self._is_paused = False
         
@@ -885,7 +1052,31 @@ class ActionPlayer:
     # -------------------------------------------------------------------------
     # 内部方法
     # -------------------------------------------------------------------------
-    
+
+    @staticmethod
+    def _compute_cumulative_offsets(actions: List[MouseAction]) -> List[float]:
+        """
+        计算每个动作相对首个动作的“累计时间偏移”（秒）。
+
+        回放时以循环起点为绝对时间锚点，按此偏移等待即可 1 倍速原样还原。
+        优先使用录制时的绝对时间戳（更精确）；旧脚本若无时间戳则退化为按
+        interval 累加。无论哪条路径，结果都等于录制时的真实时序。
+        """
+        offsets: List[float] = []
+        if not actions:
+            return offsets
+        first_ts = actions[0].timestamp
+        use_ts = first_ts > 0 and all(a.timestamp > 0 for a in actions)
+        if use_ts:
+            offsets = [(a.timestamp - first_ts) for a in actions]
+        else:
+            cum = 0.0
+            offsets.append(0.0)
+            for a in actions[1:]:
+                cum += a.interval
+                offsets.append(cum)
+        return offsets
+
     def _play_loop(self, 
                    actions: List[MouseAction], 
                    speed: float,
@@ -896,13 +1087,20 @@ class ActionPlayer:
         """
         total_actions = len(actions)
         current_loop = 0
-        start_time = time.time()
+        start_time = time.perf_counter()
+        last_action_time = start_time
         
         # 获取第一个动作的坐标（用于初始化鼠标位置）
         first_x, first_y = 0, 0
         if actions:
             first_x = max(0, min(actions[0].x, self._screen_width - 1))
             first_y = max(0, min(actions[0].y, self._screen_height - 1))
+        
+        # 预计算每个动作相对首个动作的“累计时间偏移”，用于 1 倍速原样回放。
+        cumulative_offsets = self._compute_cumulative_offsets(actions)
+
+        # 每次回放开始前重置失败计数
+        self._failed_actions = 0
         
         try:
             while True:
@@ -927,23 +1125,36 @@ class ActionPlayer:
                     pyautogui.moveTo(first_x, first_y, duration=0)
 
                 # 遍历每个动作
+                loop_start_anchor = start_time if current_loop == 0 else time.perf_counter()
+                baseline = loop_start_anchor
                 for idx, action in enumerate(actions):
                     if self._stop_requested:
                         break
-                    
-                    # 等待时间间隔
-                    if action.interval > 0:
-                        actual_interval = action.interval / max(speed, 0.01)
-                        self._smart_sleep(actual_interval)
-                    
+
+                    # 以循环起点为绝对时间锚点，按录制时的“累计时间偏移”等待，
+                    # 1 倍速即原样还原键盘/鼠标操作，不会加速，也不会逐段漂移。
+                    if idx > 0:
+                        target_time = baseline + cumulative_offsets[idx] / max(speed, 0.01)
+                        wait_seconds = target_time - time.perf_counter()
+                        if wait_seconds > 0:
+                            self._smart_sleep(wait_seconds)
+
                     if self._stop_requested:
                         break
-                    
+
                     # 执行动作
-                    self._execute_action(action)
-                    
+                    # 容错：单条动作失败只跳过这一条并继续回放，
+                    # 避免一个坏动作导致后续所有动作丢失（紧急停止 FailSafe 仍会中断）。
+                    try:
+                        self._execute_action(action)
+                    except pyautogui.FailSafeException:
+                        raise
+                    except Exception:
+                        self._failed_actions += 1
+                    last_action_time = time.perf_counter()
+
                     # 更新进度
-                    elapsed = time.time() - start_time
+                    elapsed = time.perf_counter() - start_time
                     if self.on_progress:
                         self.on_progress(idx + 1, total_actions, elapsed)
                 
@@ -959,8 +1170,13 @@ class ActionPlayer:
         except Exception as e:
             if self.on_error:
                 self.on_error(f"回放出错: {str(e)}")
-        
+
         finally:
+            # 回放结束后若有动作被跳过，提示失败数量（不中断，便于定位问题动作）
+            if self._failed_actions > 0 and self.on_error:
+                self.on_error(f"回放完成，但有 {self._failed_actions} 个动作执行失败已跳过")
+            self._release_held_keyboard_keys()
+            self._release_held_mouse_buttons()
             self._is_playing = False
             if self.on_stop:
                 self.on_stop()
@@ -1034,23 +1250,78 @@ class ActionPlayer:
             
             # 鼠标动作
             if action.action_type == MouseActionType.MOVE.value:
-                pyautogui.moveTo(x, y, duration=0)
+                # 普通移动：若仍处于拖拽中，先结束拖拽（释放按键），再移动
+                self._release_held_mouse_buttons()
+                self._mouse_controller.position = (x, y)
             
             elif action.action_type == MouseActionType.LEFT_CLICK.value:
-                pyautogui.click(x, y, button="left")
+                # 点击前确保没有遗留的拖拽按键
+                self._release_held_mouse_buttons()
+                self._mouse_controller.position = (x, y)
+                self._mouse_controller.click(mouse.Button.left)
             
             elif action.action_type == MouseActionType.LEFT_DOUBLE.value:
-                pyautogui.doubleClick(x, y, button="left")
+                self._release_held_mouse_buttons()
+                self._mouse_controller.position = (x, y)
+                self._mouse_controller.click(mouse.Button.left, count=2)
             
             elif action.action_type == MouseActionType.RIGHT_CLICK.value:
-                pyautogui.click(x, y, button="right")
+                self._release_held_mouse_buttons()
+                self._mouse_controller.position = (x, y)
+                self._mouse_controller.click(mouse.Button.right)
             
             elif action.action_type == MouseActionType.LEFT_DRAG.value:
-                pyautogui.dragTo(x, y, button="left", duration=0)
+                # 拖拽：首次进入拖拽时按下左键（只按一次），之后只移动；释放由下一个非拖拽动作或回放结束负责
+                if not self._mouse_pressed_left:
+                    self._mouse_controller.press(mouse.Button.left)
+                    self._mouse_pressed_left = True
+                self._mouse_controller.position = (x, y)
             
             elif action.action_type == MouseActionType.RIGHT_DRAG.value:
-                pyautogui.dragTo(x, y, button="right", duration=0)
-            
+                if not self._mouse_pressed_right:
+                    self._mouse_controller.press(mouse.Button.right)
+                    self._mouse_pressed_right = True
+                self._mouse_controller.position = (x, y)
+
+            elif action.action_type == MouseActionType.MIDDLE_CLICK.value:
+                # 中键单击（等同滚轮按下，常用于打开新标签、拖放链接）
+                self._release_held_mouse_buttons()
+                self._mouse_controller.position = (x, y)
+                self._mouse_controller.click(mouse.Button.middle)
+
+            elif action.action_type == MouseActionType.MIDDLE_DOUBLE.value:
+                self._release_held_mouse_buttons()
+                self._mouse_controller.position = (x, y)
+                self._mouse_controller.click(mouse.Button.middle, count=2)
+
+            elif action.action_type == MouseActionType.RIGHT_DOUBLE.value:
+                self._release_held_mouse_buttons()
+                self._mouse_controller.position = (x, y)
+                self._mouse_controller.click(mouse.Button.right, count=2)
+
+            elif action.action_type == MouseActionType.X1_CLICK.value:
+                # 侧键1单击（通常=浏览器后退）
+                self._release_held_mouse_buttons()
+                self._mouse_controller.position = (x, y)
+                self._mouse_controller.click(mouse.Button.x1)
+
+            elif action.action_type == MouseActionType.X2_CLICK.value:
+                # 侧键2单击（通常=浏览器前进）
+                self._release_held_mouse_buttons()
+                self._mouse_controller.position = (x, y)
+                self._mouse_controller.click(mouse.Button.x2)
+
+            elif action.action_type == MouseActionType.MIDDLE_DRAG.value:
+                # 中键拖拽（按下中键后移动 / 平移视图）
+                if not self._mouse_pressed_middle:
+                    self._mouse_controller.press(mouse.Button.middle)
+                    self._mouse_pressed_middle = True
+                self._mouse_controller.position = (x, y)
+
+            elif action.action_type == MouseActionType.MOUSE_RELEASE.value:
+                # 鼠标按键释放（录制端在“拖拽结束”或“按住不点后抬起”时产出）
+                self._release_one_mouse_button(action.mouse_button or 'left')
+
             elif action.action_type == MouseActionType.SCROLL.value:
                 # 滚轮回放：使用与录制端完全相同的 pynput API
                 # 录制时每个 on_scroll(dx, dy) 独立记录为一条动作，
@@ -1076,75 +1347,271 @@ class ActionPlayer:
             action: 动作对象
             is_press: True按下，False释放
         """
-        key_identifier = action.key
-        
-        if not key_identifier:
+        key_obj = self._resolve_key_action(action)
+        if key_obj is None:
             return
-        
-        try:
-            # 先尝试作为特殊键处理
-            if key_identifier in self._special_key_map:
-                key_obj = self._special_key_map[key_identifier]
-                if is_press:
-                    self._keyboard_controller.press(key_obj)
-                else:
-                    self._keyboard_controller.release(key_obj)
-                return
-            
-            # 普通字符键
-            if len(key_identifier) == 1:
-                if is_press:
-                    self._keyboard_controller.press(key_identifier)
-                else:
-                    self._keyboard_controller.release(key_identifier)
-                return
-            
-            # 作为退格键处理
-            if key_identifier in ('backspace', 'Key.backspace'):
-                if is_press:
-                    self._keyboard_controller.press(keyboard.Key.backspace)
-                else:
-                    self._keyboard_controller.release(keyboard.Key.backspace)
-                return
-            
-            # 其他特殊键名（如Key.enter, Key.space等带Key前缀）
-            if key_identifier.startswith('Key.'):
-                key_name = key_identifier[4:]
-                if key_name in self._special_key_map:
-                    key_obj = self._special_key_map[key_name]
-                    if is_press:
-                        self._keyboard_controller.press(key_obj)
-                    else:
-                        self._keyboard_controller.release(key_obj)
-                    return
-            
-            # 使用VK码
-            if action.key_code and action.key_code > 0:
+
+        if is_press:
+            self._keyboard_controller.press(key_obj)
+            # 记录按下顺序，用于释放时按“主键先放、修饰键后放”的 Windows 习惯修正。
+            self._keyboard_release_order.append(self._key_stable_name(key_obj))
+        else:
+            self._keyboard_controller.release(key_obj)
+            self._forget_released_key(self._key_stable_name(key_obj))
+
+    def _resolve_key_action(self, action: MouseAction):
+        """
+        从动作字段重建 pynput 按键对象。
+        优先级：稳定键名 > VK码 > 旧版 key 字段 > key_char。
+        """
+        key_name = (action.key_name or action.key or "").strip()
+        if key_name:
+            # 去掉旧脚本可能带上的 Key. 前缀
+            normalized_name = key_name[4:] if key_name.startswith("Key.") else key_name
+            if normalized_name in self._special_key_map:
+                return self._special_key_map[normalized_name]
+
+            if normalized_name.upper().startswith("VK_") and normalized_name.isascii():
                 try:
-                    vk_key = keyboard.KeyCode.from_vk(action.key_code)
-                    if is_press:
-                        self._keyboard_controller.press(vk_key)
-                    else:
-                        self._keyboard_controller.release(vk_key)
-                    return
+                    return keyboard.KeyCode.from_vk(int(normalized_name[3:], 0))
                 except Exception:
                     pass
-            
-            # 最后尝试直接按键（可能是未识别的特殊键）
+
+            if len(normalized_name) == 1:
+                try:
+                    return keyboard.KeyCode.from_char(normalized_name)
+                except Exception:
+                    pass
+
+        if action.key_code:
             try:
-                if is_press:
-                    self._keyboard_controller.press(key_identifier)
-                else:
-                    self._keyboard_controller.release(key_identifier)
+                return keyboard.KeyCode.from_vk(int(action.key_code))
             except Exception:
                 pass
-        
+
+        fallback_key = action.key or action.key_char
+        if fallback_key:
+            normalized_fallback = fallback_key[4:] if fallback_key.startswith("Key.") else fallback_key
+            if normalized_fallback in self._special_key_map:
+                return self._special_key_map[normalized_fallback]
+
+            if len(fallback_key) == 1:
+                try:
+                    return keyboard.KeyCode.from_char(fallback_key)
+                except Exception:
+                    return fallback_key
+
+            try:
+                return keyboard.KeyCode.from_char(fallback_key)
+            except Exception:
+                return fallback_key
+
+        return None
+
+    def _key_stable_name(self, key_obj) -> str:
+        """把 pynput 按键对象转成稳定名称，用于释放顺序管理。"""
+        try:
+            if hasattr(key_obj, 'name'):
+                return key_obj.name
+            if hasattr(key_obj, 'char') and key_obj.char:
+                return key_obj.char
+            if hasattr(key_obj, 'vk') and key_obj.vk:
+                return f"vk_{key_obj.vk}"
         except Exception:
             pass
+        return str(key_obj)
+
+    def _forget_released_key(self, key_name: str):
+        """释放一个键后，从释放顺序表中移除它；保持列表只包含仍按下的键。"""
+        try:
+            if key_name in self._keyboard_release_order:
+                self._keyboard_release_order.remove(key_name)
+        except Exception:
+            pass
+
+    def _release_held_keyboard_keys(self):
+        """回放停止或异常时释放仍保持按下的键，避免卡住键盘状态。"""
+        if not self._keyboard_release_order:
+            return
+
+        for key_name in reversed(self._keyboard_release_order):
+            key_obj = self._resolve_pynput_key_from_name(key_name)
+            if key_obj is None:
+                continue
+            try:
+                self._keyboard_controller.release(key_obj)
+            except Exception:
+                pass
+        self._keyboard_release_order.clear()
+
+    def _release_one_mouse_button(self, bname: str):
+        """释放指定名称的鼠标按键（left/right/middle/x1/x2），并更新状态标志。"""
+        mapping = {
+            'left': (mouse.Button.left, '_mouse_pressed_left'),
+            'right': (mouse.Button.right, '_mouse_pressed_right'),
+            'middle': (mouse.Button.middle, '_mouse_pressed_middle'),
+            'x1': (mouse.Button.x1, '_mouse_pressed_x1'),
+            'x2': (mouse.Button.x2, '_mouse_pressed_x2'),
+        }
+        if bname not in mapping:
+            return
+        btn, attr = mapping[bname]
+        if getattr(self, attr, False):
+            try:
+                self._mouse_controller.release(btn)
+            except Exception:
+                pass
+            setattr(self, attr, False)
+
+    def _release_held_mouse_buttons(self):
+        """回放停止/异常/拖拽结束时释放仍按下的鼠标按键，避免卡在“按下”状态。"""
+        for bname in ('left', 'right', 'middle', 'x1', 'x2'):
+            self._release_one_mouse_button(bname)
+
+    def _resolve_pynput_key_from_name(self, key_name: str):
+        """通过稳定键名解析为 pynput 按键对象。"""
+        normalized_name = key_name[4:] if key_name.startswith("Key.") else key_name
+        normalized_name = normalized_name.lower() if normalized_name.isascii() else normalized_name
+        if normalized_name in self._special_key_map:
+            return self._special_key_map[normalized_name]
+        if normalized_name.startswith("vk_"):
+            try:
+                return keyboard.KeyCode.from_vk(int(normalized_name[3:], 0))
+            except Exception:
+                return None
+        if len(normalized_name) == 1:
+            try:
+                return keyboard.KeyCode.from_char(normalized_name)
+            except Exception:
+                return None
+        return None
     
     def _is_coord_valid(self, x: int, y: int) -> bool:
         """检查坐标是否在屏幕范围内"""
         return 0 <= x < self._screen_width and 0 <= y < self._screen_height
+
+
+# ================================================================================
+# 脚本自检层 - 回放/加载前扫描问题动作
+# ================================================================================
+
+# 拖拽类型 → 内部按键名
+_DRAG_BTN_MAP = {
+    MouseActionType.LEFT_DRAG.value: 'left',
+    MouseActionType.RIGHT_DRAG.value: 'right',
+    MouseActionType.MIDDLE_DRAG.value: 'middle',
+}
+_KEY_ACTION_TYPES = {"key_press", "key_release"}
+
+
+def validate_actions(actions: List[MouseAction],
+                     player: Optional['ActionPlayer'] = None,
+                     screen_size: Optional[tuple] = None) -> List[Dict[str, Any]]:
+    """回放前自检：扫描脚本中可能无法正确回放的动作，提前告知用户。
+
+    检查项：
+      1. 空脚本
+      2. 不支持/未知的动作类型（回放时会被静默忽略）
+      3. 键盘动作无法解析出按键（回放时该按键动作会被跳过）
+      4. 鼠标坐标超出屏幕范围（回放时会被自动裁剪，可能点错位置）
+      5. 孤立的按键释放（此前没有对应的按下/拖拽）
+      6. 脚本结束时仍有按键处于拖拽状态（缺少释放动作）
+
+    参数：
+        actions: 待检查的动作列表
+        player: 可选的 ActionPlayer 实例，用于校验键盘动作能否解析
+        screen_size: 屏幕尺寸，默认取当前屏幕
+
+    返回：
+        问题列表，每项为 {"level": "error"/"warning", "index": int,
+                          "type": str, "message": str}
+    """
+    issues: List[Dict[str, Any]] = []
+
+    if not actions:
+        issues.append({
+            "level": "error", "index": -1, "type": "",
+            "message": "脚本为空，没有任何可回放的动作"
+        })
+        return issues
+
+    if screen_size is None:
+        try:
+            screen_size = pyautogui.size()
+        except Exception:
+            screen_size = (1920, 1080)
+    sw, sh = screen_size
+
+    known_types = {t.value for t in MouseActionType}
+    held_drag_buttons = set()  # 当前处于"已按下未释放"的按键
+
+    for i, a in enumerate(actions):
+        at = a.action_type
+
+        # 键盘动作
+        if a.action_subtype == "keyboard" or at in _KEY_ACTION_TYPES:
+            resolved = None
+            if player is not None:
+                try:
+                    resolved = player._resolve_key_action(a)
+                except Exception:
+                    resolved = None
+            if resolved is None and not (a.key_name or a.key or a.key_char or a.key_code):
+                issues.append({
+                    "level": "warning", "index": i, "type": at,
+                    "message": f"第 {i+1} 步：键盘动作缺少可识别的按键信息，回放时会被跳过"
+                })
+            continue
+
+        # 未知动作类型
+        if at not in known_types:
+            issues.append({
+                "level": "warning", "index": i, "type": at,
+                "message": f"第 {i+1} 步：不支持的动作类型「{at}」，回放时会被跳过"
+            })
+            continue
+
+        # 坐标越界
+        if at != MouseActionType.KEYFRAME.value and not (0 <= a.x < sw and 0 <= a.y < sh):
+            issues.append({
+                "level": "warning", "index": i, "type": at,
+                "message": (f"第 {i+1} 步：坐标 ({a.x}, {a.y}) 超出屏幕范围 "
+                            f"({sw}x{sh})，回放时会自动裁剪到屏幕边缘")
+            })
+
+        # 拖拽 / 释放配对检查
+        if at in _DRAG_BTN_MAP:
+            held_drag_buttons.add(_DRAG_BTN_MAP[at])
+        elif at == MouseActionType.MOUSE_RELEASE.value:
+            btn = a.mouse_button or 'left'
+            if btn not in held_drag_buttons:
+                issues.append({
+                    "level": "warning", "index": i, "type": at,
+                    "message": f"第 {i+1} 步：孤立的 {btn} 键释放（此前没有对应的按下或拖拽）"
+                })
+            held_drag_buttons.discard(btn)
+
+    # 结束时仍处于拖拽状态
+    for btn in sorted(held_drag_buttons):
+        issues.append({
+            "level": "warning", "index": len(actions) - 1, "type": "",
+            "message": f"脚本结束时 {btn} 键仍处于拖拽状态（末尾缺少释放动作）"
+        })
+
+    return issues
+
+
+def format_issues(issues: List[Dict[str, Any]], max_items: int = 10) -> str:
+    """把自检问题列表格式化为可读文本。"""
+    if not issues:
+        return "未发现问题"
+    lines = []
+    for it in issues[:max_items]:
+        prefix = "【错误】" if it["level"] == "error" else "【警告】"
+        lines.append(prefix + it["message"])
+    if len(issues) > max_items:
+        lines.append(f"…… 另有 {len(issues) - max_items} 条问题未显示")
+    return "\n".join(lines)
 
 
 # ================================================================================
@@ -1167,7 +1634,7 @@ class MouseRecorderApp:
         """初始化应用"""
         # 创建主窗口
         self.root = tk.Tk()
-        self.root.title("鼠小侠-曦微出品自动点击器")
+        self.root.title("鼠小侠V4.0-键鼠录制回放软件")
         
         # 窗口尺寸
         window_width = 360
@@ -1226,10 +1693,10 @@ class MouseRecorderApp:
     # -------------------------------------------------------------------------
     
     def _set_window_icon(self):
-        """设置窗口图标"""
-        # 兼容PyInstaller打包后的临时目录
+        """设置窗口图标与任务栏图标"""
+        # 兼容 PyInstaller 单文件打包后的临时目录（资源在 _MEIPASS 中）
         if getattr(sys, 'frozen', False):
-            base_dir = os.path.dirname(sys.executable)
+            base_dir = getattr(sys, '_MEIPASS', os.path.dirname(sys.executable))
         else:
             base_dir = os.path.dirname(os.path.abspath(__file__))
         icon_path = os.path.join(base_dir, "icon.ico")
@@ -1490,10 +1957,11 @@ class MouseRecorderApp:
         content_frame = tk.Frame(row)
         content_frame.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
-        content_frame.grid_columnconfigure(0, weight=1, uniform="script_col")
+        content_frame.grid_columnconfigure(0, weight=2, uniform="script_col")
         content_frame.grid_columnconfigure(1, weight=1, uniform="script_col")
         content_frame.grid_columnconfigure(2, weight=1, uniform="script_col")
         content_frame.grid_columnconfigure(3, weight=1, uniform="script_col")
+        content_frame.grid_columnconfigure(4, weight=1, uniform="script_col")
 
         self.script_var = tk.StringVar()
         self.script_combobox = ttk.Combobox(
@@ -1533,7 +2001,15 @@ class MouseRecorderApp:
             activebackground="#F78989",
             command=self._on_delete_script,
             **action_btn_config
-        ).grid(row=0, column=3, padx=(2, 0), sticky="nsew")
+        ).grid(row=0, column=3, padx=2, sticky="nsew")
+
+        tk.Button(
+            content_frame, text="自检",
+            bg="#409EFF", fg="white",
+            activebackground="#66B1FF",
+            command=self._on_self_check_click,
+            **action_btn_config
+        ).grid(row=0, column=4, padx=(2, 0), sticky="nsew")
 
         self._load_script_list()
 
@@ -1647,21 +2123,22 @@ class MouseRecorderApp:
             self._countdown_window = tk.Toplevel(self.root)
             self._countdown_window.overrideredirect(True)  # 无边框
             self._countdown_window.attributes("-transparentcolor", "#1a1a1a")  # 透明背景
-            
+            self._countdown_window.attributes("-topmost", True)  # 置顶显示
+
             # 获取屏幕尺寸
             screen_width = self._countdown_window.winfo_screenwidth()
             screen_height = self._countdown_window.winfo_screenheight()
-            
+
             # 窗口尺寸
             window_size = 240
-            
+
             # 居中显示
             x = (screen_width - window_size) // 2
             y = (screen_height - window_size) // 2
-            
+
             self._countdown_window.geometry(f"{window_size}x{window_size}+{x}+{y}")
             self._countdown_window.configure(bg="#1a1a1a")
-            
+
             # 创建带圈红色数字标签
             self._countdown_label = tk.Label(
                 self._countdown_window,
@@ -1671,9 +2148,14 @@ class MouseRecorderApp:
                 bg="#1a1a1a"    # 透明背景色
             )
             self._countdown_label.pack(expand=True)
+
+            # 强制刷新显示，确保窗口立即可见（尤其解决快捷键触发时主窗口已隐藏导致倒计时不显示的问题）
+            self._countdown_window.update_idletasks()
+            self._countdown_window.lift()
         else:
             # 更新数字（保持带圈红色字体）
             self._countdown_label.configure(text=display_text)
+            self._countdown_window.lift()  # 每次更新都确保置顶
         
         # 1秒后继续倒计时
         self._countdown_window.after(1000, lambda: self._show_countdown(count - 1, callback))
@@ -1746,12 +2228,27 @@ class MouseRecorderApp:
             except ValueError:
                 loop_count = 1
         
+        # 回放前自检：提前扫描问题动作，避免回放中途才发现异常导致丢动作
+        issues = validate_actions(self.actions, player=self.player)
+        if issues:
+            error_count = sum(1 for it in issues if it["level"] == "error")
+            warn_count = len(issues) - error_count
+            summary = (f"脚本自检发现 {len(issues)} 个问题"
+                       f"（错误 {error_count} 个，警告 {warn_count} 个）：\n\n"
+                       f"{format_issues(issues)}\n\n是否仍然开始回放？")
+            self._log(f"脚本自检：发现 {len(issues)} 个问题（错误 {error_count}，警告 {warn_count}）")
+            if not messagebox.askyesno("脚本自检", summary):
+                self._log("已取消回放")
+                return
+        else:
+            self._log(f"脚本自检通过：{len(self.actions)} 步，未发现问题")
+
         # 开始回放
         self.state = AppState.PLAYING
         self.player.play(
-            self.actions, 
-            speed=speed, 
-            loop_count=loop_count, 
+            self.actions,
+            speed=speed,
+            loop_count=loop_count,
             infinite_loop=infinite
         )
         
@@ -1861,6 +2358,7 @@ class MouseRecorderApp:
             self.actions = actions
             self._update_step_count()
             self._log(f"已加载脚本: {os.path.basename(filepath)}, 共{len(actions)}步")
+            self._log_script_check()
             self._refresh_script_list()
             idx = self.script_combobox["values"].index(os.path.basename(filepath)) if os.path.basename(filepath) in self.script_combobox["values"] else -1
             if idx >= 0:
@@ -1896,6 +2394,7 @@ class MouseRecorderApp:
                     self.actions = actions
                     self._update_step_count()
                     self._log(f"已加载脚本: {first_script}, 共{len(actions)}步")
+                    self._log_script_check()
             else:
                 self.script_combobox["values"] = ["无"]
                 self.script_combobox.current(0)
@@ -1917,6 +2416,43 @@ class MouseRecorderApp:
         except Exception:
             self.script_combobox["values"] = ["无"]
     
+    def _on_self_check_click(self):
+        """点击「自检」按钮：对当前脚本做一次完整自检并弹出结果"""
+        if not self.actions:
+            messagebox.showinfo("脚本自检", "当前没有已加载的脚本，请先加载脚本。")
+            self._log("脚本自检：当前没有已加载的脚本")
+            return
+
+        issues = self._log_script_check()
+        if not issues:
+            messagebox.showinfo(
+                "脚本自检通过",
+                f"当前脚本共 {len(self.actions)} 步，未发现问题，可以正常回放。")
+            return
+
+        error_count = sum(1 for it in issues if it["level"] == "error")
+        warn_count = len(issues) - error_count
+        messagebox.showwarning(
+            "脚本自检发现问题",
+            f"共发现 {len(issues)} 个问题（错误 {error_count} 个，警告 {warn_count} 个）：\n\n"
+            f"{format_issues(issues)}")
+
+    def _log_script_check(self):
+        """脚本加载后做一次自检并写入运行日志，让问题在加载时就能被发现"""
+        issues = validate_actions(self.actions, player=self.player)
+        if not issues:
+            self._log(f"脚本自检通过：{len(self.actions)} 步，未发现问题")
+            return issues
+        error_count = sum(1 for it in issues if it["level"] == "error")
+        self._log(f"脚本自检：发现 {len(issues)} 个问题"
+                  f"（错误 {error_count}，警告 {len(issues) - error_count}），回放前会再次提示")
+        for it in issues[:5]:
+            tag = "[错误] " if it["level"] == "error" else "[警告] "
+            self._log("  " + tag + it["message"])
+        if len(issues) > 5:
+            self._log(f"  …… 另有 {len(issues) - 5} 条问题未显示")
+        return issues
+
     def _on_script_selected(self, event):
         """选择脚本下拉列表中的脚本"""
         selected = self.script_var.get()
@@ -1935,6 +2471,7 @@ class MouseRecorderApp:
             self.actions = actions
             self._update_step_count()
             self._log(f"已加载脚本: {selected}, 共{len(actions)}步")
+            self._log_script_check()
         else:
             messagebox.showerror("加载失败", "脚本文件损坏或格式错误")
             self._refresh_script_list()
@@ -1959,6 +2496,7 @@ class MouseRecorderApp:
             self._update_step_count()
             filename = os.path.basename(filepath)
             self._log(f"已加载脚本: {filename}, 共{len(actions)}步")
+            self._log_script_check()
             
             script_dir = self._get_script_dir()
             dest_path = os.path.join(script_dir, filename)
@@ -2057,6 +2595,31 @@ class MouseRecorderApp:
     
     def _on_action_recorded(self, action: MouseAction):
         """录制到新动作时的回调"""
+        # 双击处理：用双击动作替换前一次同键单击，避免回放成“单击+双击=三击”
+        if (action.action_subtype == "mouse"
+                and action.action_type.endswith("_double")
+                and action.mouse_button):
+            single_map = {'left': 'left_click', 'right': 'right_click', 'middle': 'middle_click'}
+            single_type = single_map.get(action.mouse_button)
+            if single_type:
+                for i in range(len(self.actions) - 1, -1, -1):
+                    prev = self.actions[i]
+                    if prev.action_type == single_type and prev.action_subtype == "mouse":
+                        # 替换动作类型/标识，但保留前一次单击的时序与坐标（双击时机由系统/应用自身判定）
+                        self.actions[i] = MouseAction(
+                            action_type=action.action_type,
+                            x=prev.x, y=prev.y,
+                            interval=prev.interval,
+                            scroll_dy=prev.scroll_dy,
+                            scroll_dx=prev.scroll_dx,
+                            timestamp=prev.timestamp,
+                            is_keyframe=prev.is_keyframe,
+                            action_subtype="mouse",
+                            mouse_button=action.mouse_button
+                        )
+                        self.root.after(0, self._update_step_count)
+                        return
+        
         self.actions.append(action)
         # 在UI线程中更新显示
         self.root.after(0, self._update_step_count)
